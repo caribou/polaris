@@ -1,0 +1,38 @@
+(defn home
+  [request]
+  {:status 200})
+
+(defn authenticate
+  [inner]
+  (fn [request]
+    (if (auth request)
+      (inner request)
+      {:status 401})))
+
+(def composite (comp enrich authenticate))
+
+(def auth-routes [["/user" :user-home ...]
+                  ["/"]])
+
+(def user-routes ["/user" :user ... []])
+
+(def routes [["/" :home {:GET {:action home}}]
+             user-routes
+             admin
+             api])
+
+(def routes [["/" :home {:GET {:action home}} []]])
+
+
+--> (def page-tree
+
+(def handler
+  (let [router (make-router routes {:wrappers [authenticate [:user-home :yellow]
+                                               enrich [:user-home]
+                                               wrap-json-params [:gonon]
+                                               composite [:yellow]]
+                                    :hello !!})
+        [route-for router-2] (make-router other-routes)
+        (route-for slug params)]
+    (-> router
+        ())))
