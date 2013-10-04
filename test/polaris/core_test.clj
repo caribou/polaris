@@ -1,6 +1,6 @@
-(ns north-star.core-test
+(ns polaris.core-test
   (:require [clojure.test :refer :all]
-            [north-star.core :refer :all]))
+            [polaris.core :refer :all]))
 
 (deftest a-test
   (testing "FIXME, I fail."

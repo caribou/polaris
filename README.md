@@ -1,14 +1,16 @@
-# north-star
+# polaris
 
-A Clojure library designed to ... well, that part is up to you.
+Routing for Clojure (without macros!)
+
+Also, reverse routing (!)
 
 ## Usage
 
-FIXME
+
 
 ## License
 
-Copyright © 2013 FIXME
+Copyright © 2013 Ryan Spangler
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.

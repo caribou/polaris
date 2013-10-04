@@ -1,4 +1,4 @@
-(ns north-star.core
+(ns polaris.core
   (:require [clojure.string :as string]
             [clout.core :as clout]
             [flatland.ordered.map :as flatland]))
