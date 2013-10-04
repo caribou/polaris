@@ -1,13 +1,13 @@
 (ns polaris.core
   (:require [clojure.string :as string]
-            [clout.core :as clout]
-            [flatland.ordered.map :as flatland]))
+            [clout.core :as clout]))
 
 (defrecord Route [key method path route action])
+(defrecord RouteTree [order mapping])
 
 (defn empty-routes
   []
-  (flatland/ordered-map))
+  (RouteTree. [] {}))
 
 (defn- sanitize-method
   [method]
@@ -54,8 +54,9 @@
   [routes key method path action]
   (let [method (sanitize-method method)
         compiled-route (clout/route-compile path)
-        route (Route. key method path (add-optional-slash-to-route compiled-route) action)]
-    (assoc routes key route)))
+        route (Route. key method path (add-optional-slash-to-route compiled-route) action)
+        mapped (assoc-in routes [:mapping key] route)]
+    (update-in mapped [:order] #(conj % route))))
 
 (defn- resolve-action-map
   [[method action]]
@@ -79,6 +80,7 @@
   [root-path [path key action subroutes]]
   (let [sub-path (string/replace path #"^/" "")
         full-path (str root-path "/" sub-path)
+        full-path (string/replace full-path #"/$" "")
         children (build-route-tree full-path subroutes)
         actions (action-methods action)
         routes (map 
@@ -122,7 +124,7 @@
   ([routes] (router routes (fn [request] {:status 200 :body "No action defined at this route"})))
   ([routes default-action]
      (fn [request]
-       (let [ordered-routes (vals routes)
+       (let [ordered-routes (:order routes)
              [route match] (find-first (partial route-matches? request) ordered-routes)]
          (if match
            (let [request (assoc request :route-params match)
@@ -138,7 +140,7 @@
 (defn- get-path
   [routes key]
   (or 
-   (get (get routes (keyword key)) :path)
+   (get-in routes [:mapping (keyword key) :path])
    (throw (new Exception (str "route for " key " not found")))))
 
 (defn sort-route-opts

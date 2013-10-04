@@ -1,6 +1,6 @@
 # polaris
 
-Routing for Clojure (without macros!)
+Routing defined by data, not macros
 
 Also, reverse routing (!)
 
