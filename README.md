@@ -4,9 +4,9 @@
 
 ![Polaris](http://upload.wikimedia.org/wikipedia/commons/thumb/3/31/Night_Photography.jpg/960px-Night_Photography.jpg)
 
-Routing defined by data, not macros
+Routing defined by data, not macros.
 
-Also, provides reverse routing for building urls from parameters
+Also, provides reverse routing for building urls from parameters!
 
 ## Installation
 
