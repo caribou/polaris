@@ -68,4 +68,3 @@
     (is (= "What are you doing out here wasteland?" (:body (handler {:uri "/wasteland"}))))
     (is (= 404 (:status (handler {:uri "/wasteland/further/nothing/here/monolith"}))))
     (is (= "/parallel/perpendicular/line/impossible" (reverse-route routes :perpendicular {:tensor "line" :manifold "impossible"})))))
-    
