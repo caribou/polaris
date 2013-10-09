@@ -34,12 +34,12 @@ Once you have a vector of route definitions, you can build your routes with `pol
 ```clj
 (defn base-handler
   [request]
-  {:status 200 
+  {:status 200
    :body "This is the base"})
-  
+
 (defn sub-handler
   [request]
-  {:status 200 
+  {:status 200
    :body (str "We received " (-> request :params :leaf))})
 
 (def route-definitions
@@ -74,17 +74,17 @@ Handlers can be scoped to different request methods:
 ```clj
 (defn get-handler
   [request]
-  {:status 200 
+  {:status 200
    :body "The method defaults to GET"})
 
 (defn post-handler
   [request]
-  {:status 200 
+  {:status 200
    :body "This is a POST"})
 
 (defn delete-handler
   [request]
-  {:status 200 
+  {:status 200
    :body "DELETED!!"})
 
 (def route-definitions
@@ -107,7 +107,7 @@ path elements.
 ```clj
 (def route-definitions
   [["/path/:with/:lots/:of/:variables" :demo (fn [request] "WHAT")]])
-  
+
 (def routes (polaris.core/build-routes route-definitions))
 (polarise.core/reverse-route routes :demo {:with "now" :lots "formed" :of "from" :variables "map"})
 ;; --> "/path/now/formed/from/map"   !!
