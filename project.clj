@@ -1,4 +1,4 @@
-(defproject polaris "0.0.1"
+(defproject polaris "0.0.2"
   :description "Requests guided by the constellations"
   :url "http://github.com/caribou/polaris"
   :license {:name "Eclipse Public License"
