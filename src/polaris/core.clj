@@ -72,7 +72,7 @@
    (fn? methods) [[:ALL methods]]
    (symbol? methods) [[:ALL (resolve methods)]]
    (map? methods) (map resolve-action-map methods)
-   :else [[:ALL (fn [& args] nil)]]))
+   :else [[:ALL methods]]))
 
 (declare build-route-tree)
 
@@ -124,12 +124,15 @@
   ([routes] (router routes (fn [request] {:status 200 :body "No action defined at this route"})))
   ([routes default-action]
      (fn [request]
+       (println (str request))
        (let [ordered-routes (:order routes)
              [route match] (find-first (partial route-matches? request) ordered-routes)]
          (if match
            (let [request (assoc request :route-params match)
                  request (update-in request [:params] #(merge % match))
                  action (:action route)]
+             (println route match)
+             (println (fn? action))
              (if action
                (action request)
                (do 
