@@ -12,7 +12,7 @@
 (defn- sanitize-method
   [method]
   (let [method (if (or (nil? method)
-                       (and (string? method) 
+                       (and (string? method)
                             (empty? method)))
                  :ALL
                  method)]
@@ -44,9 +44,9 @@
 
 (defn- add-optional-slash-to-route
   [route]
-  (update-in 
-   route 
-   [:re] 
+  (update-in
+   route
+   [:re]
    (fn [re]
      (re-pattern (str re "/?")))))
 
@@ -68,7 +68,7 @@
 
 (defn- action-methods
   [methods]
-  (cond 
+  (cond
    (fn? methods) [[:ALL methods]]
    (symbol? methods) [[:ALL (resolve methods)]]
    (map? methods) (map resolve-action-map methods)
@@ -83,7 +83,7 @@
         full-path (string/replace full-path #"/$" "")
         children (build-route-tree full-path subroutes)
         actions (action-methods action)
-        routes (map 
+        routes (map
                 (fn [[method action]]
                   [key method full-path action])
                 actions)]
@@ -98,7 +98,7 @@
   ([route-tree root-path]
      (let [routes (empty-routes)
            built (build-route-tree root-path route-tree)]
-       (reduce 
+       (reduce
         (fn [routes [key method path action]]
           (merge-route routes key method path action))
         routes built))))
@@ -132,14 +132,14 @@
                  action (:action route)]
              (if action
                (action request)
-               (do 
+               (do
                  (println (format "No action for route %s %s: %s!" (:method route) (:path route) (:key route)))
                  (default-action request))))
            {:status 404})))))
 
 (defn- get-path
   [routes key]
-  (or 
+  (or
    (get-in routes [:mapping (keyword key) :path])
    (throw (new Exception (str "route for " key " not found")))))
 
