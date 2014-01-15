@@ -143,10 +143,10 @@
    (get-in routes [:mapping (keyword key) :path])
    (throw (new Exception (str "route for " key " not found")))))
 
-(defn sort-route-opts
-  [routes key opts]
+(defn sort-route-params
+  [routes key params]
   (let [path (get-path routes key)
-        opt-keys (keys opts)
+        opt-keys (keys params)
         route-keys (map
                     read-string
                     (filter
@@ -154,23 +154,32 @@
                      (string/split path #"/")))
         query-keys (remove (into #{} route-keys) opt-keys)]
     {:path path
-     :route (select-keys opts route-keys)
-     :query (select-keys opts query-keys)}))
+     :route (select-keys params route-keys)
+     :query (select-keys params query-keys)}))
+
+(defn query-item
+  [[k v]] 
+  (str 
+   (url-encode (name k))
+   "="
+   (url-encode v)))
+
+(defn build-query-string
+  [params query-keys]
+  (let [query (string/join "&" (map query-item (select-keys params query-keys)))]
+    (and (seq query) (str "?" query))))
 
 (defn reverse-route
-  [routes key opts]
-  (let [{path :path
-         route-matches :route
-         query-matches :query} (sort-route-opts routes key opts)
-        route-keys (keys route-matches)
-        query-keys (keys query-matches)
-        opt-keys (keys opts)
-        base (reduce
-              #(string/replace-first %1 (str (keyword %2)) (get opts %2))
-              path opt-keys)
-        query-item (fn [[k v]] (str (url-encode (name k))
-                                    "="
-                                    (url-encode v)))
-        query (string/join "&" (map query-item (select-keys opts query-keys)))
-        query (and (seq query) (str "?" query))]
-    (str base query)))
+  ([routes key params] (reverse-route routes key params {}))
+  ([routes key params opts]
+     (let [{path :path
+            route-matches :route
+            query-matches :query} (sort-route-params routes key params)
+            route-keys (keys route-matches)
+            query-keys (keys query-matches)
+            opt-keys (keys params)
+            base (reduce
+                  #(string/replace-first %1 (str (keyword %2)) (get params %2))
+                  path opt-keys)
+            query (if-not (:no-query opts) (build-query-string params query-keys))]
+       (str base query))))
