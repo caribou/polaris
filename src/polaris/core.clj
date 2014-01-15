@@ -111,6 +111,9 @@
 (defn build-routes
   "Create routes that can be used with router. 
 
+  Specs will be matched in the order they are provided, regardless of
+  their nesting depth.
+
   A spec* must be a vector of either**
 
   [path-spec ident action-spec & specs] or
@@ -124,8 +127,9 @@
   \"/home/profiles/:username/\". These can be resolved under :params
   in the request when it is passed to an action.
 
-  Idents can be used for reverse-routing (reverse-route). They must be
-  unique accross all specs (regardless of their nesting position).
+  Idents can used for reverse-routing (reverse-route). They can be any
+  value that is not a coll and must be unique accross all
+  specs (regardless of their nesting depth).
 
 
   action-spec is either:
@@ -138,41 +142,40 @@
 
   - a hash-map mapping request-methods to functions or namespaces
 
-
-  * specs can't be overwritten by specs with the same count of total
-    sub-paths
-
+  * specs may be contained in vectors, but must not
   ** nested specs are optional in both forms"
   [& specs]
   (-> specs to-routes make-lookup-tables))
 
 (defn reverse-route
-  "Reconstruct url for route at ident based on parameters in opts."
-  [routes ident opts]
-  (let [path (get-in routes [:by-ident ident :full-path])
-        [route-str opts-left]
-        (reduce (fn [[route-str opts] sub-dir]
-                  (if (= (first sub-dir) \:)
-                    (let [kw (keyword (subs sub-dir 1))]
-                      [(str route-str "/" (get opts kw))
-                       (dissoc opts kw)])
-                    [(str route-str "/" sub-dir) opts]))
-                ["" opts]
-                (filter seq (string/split path #"/")))]
-    (str route-str
-         (some->> opts-left
-                  (mapv (fn [[k v]] (str (url-encode (name k))
-                                         "="
-                                         (url-encode v))))
-                  (string/join "&")
-                  seq
-                  (str "?")))))
+  "Reconstruct url for route at ident based on parameters in opts
+  (optional)."
+  ([routes ident] (reverse-route ident {}))
+  ([routes ident opts]
+     (let [path (get-in routes [:by-ident ident :full-path])
+           [route-str opts-left]
+           (reduce (fn [[route-str opts] sub-dir]
+                     (if (= (first sub-dir) \:)
+                       (let [kw (keyword (subs sub-dir 1))]
+                         [(str route-str "/" (get opts kw))
+                          (dissoc opts kw)])
+                       [(str route-str "/" sub-dir) opts]))
+                   ["" opts]
+                   (filter seq (string/split path #"/")))]
+       (str route-str
+            (some->> opts-left
+                     (mapv (fn [[k v]] (str (url-encode (name k))
+                                            "="
+                                            (url-encode v))))
+                     (string/join "&")
+                     seq
+                     (str "?"))))))
 
 (defn router
-  "Create a polaris request handler. Routes must have been built using
+  "Create a Polaris request handler. Routes must have been built using
   build-routes. 
 
-  A map with resolved parameters is merged to onto :params in requests
+  A map with resolved parameters is merged onto :params in requests
   passed to resolved actions, routes can be found under :routes."
   ([routes]
      (router
