@@ -37,7 +37,7 @@
     (reduce-kv #(assoc %1
                   (sanitize-method %2)
                   (sanitize-action-subspec %3)) {} action-spec)
-    (sanitize-action-spec {:ALL action-spec})))
+    (recur {:ALL action-spec})))
 
 (defn- add-optional-slash-to-route
   [route]
