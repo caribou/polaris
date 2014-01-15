@@ -43,13 +43,13 @@
   {:status 200 :body (str (get-in request [:params :with-keyword]))})
 
 (def test-routes
-  ["/" :home home
-   ["/child" :child child
-    ["/grandchild/:face" :grandchild grandchild]]
-   ["/sibling/:hand" :sibling sibling]
-   ["/parallel" :parallel {:GET parallel :POST lellarap}
-    ["/orthogonal/:vector" :orthogonal {:PUT orthogonal}]
-    ["/perpendicular/:tensor/:manifold" :perpendicular perpendicular]]
+  [["/" :home home
+     [["/child" :child child
+       [["/grandchild/:face" :grandchild grandchild]]]
+      ["/sibling/:hand" :sibling sibling]]]
+   ["parallel" :parallel {:GET parallel :POST lellarap}
+    [["/orthogonal/:vector" :orthogonal {:PUT orthogonal}]
+     ["/perpendicular/:tensor/:manifold" :perpendicular perpendicular]]]
    ["/:further" :further further]
    ["/i-am-subroute/:with-keyword"
     ["/got-keyword?" :got-keyword? got-keyword?]]

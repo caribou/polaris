@@ -60,18 +60,21 @@
 
 (defn- to-routes
   ([user-specs]
-     (to-routes "/" user-specs))
+     (to-routes "" user-specs))
   ([root-path user-specs]
      (let [make-sub-path (partial compose-path root-path)
            step (fn [[path ident action-spec & sub-specs :as user-spec]]
-                  (let [sub-path (compose-path root-path path)]
-                    (if-not (coll? ident)
-                      (into [{:compiled-path (compile-path sub-path)
-                              :full-path sub-path
-                              :user-spec user-spec
-                              :actions (sanitize-action-spec action-spec)}]
-                            (to-routes sub-path sub-specs))
-                      (to-routes sub-path (rest user-spec)))))]
+                  (if-not (coll? path)
+                    (let [sub-path (compose-path root-path path)]
+                      (if-not (coll? ident)
+                        (into [{:compiled-path (compile-path sub-path)
+                                :full-path sub-path
+                                :user-spec user-spec
+                                :actions (sanitize-action-spec action-spec)}]
+                              (to-routes sub-path sub-specs))
+                        (to-routes sub-path (rest user-spec))))
+                    ;; unnest:
+                    (to-routes root-path user-spec)))]
        (->> user-specs
             (keep step) ;; yeah, ...
             (reduce into [])))))
