@@ -38,6 +38,10 @@
   [request]
   {:status 200 :body (str "What are you doing out here " (-> request :params :further) "?")})
 
+(defn got-keyword?
+  [request]
+  {:status 200 :body (str (get-in request [:params :with-keyword]))})
+
 (def test-routes
   ["/" :home home
    ["/child" :child child
@@ -46,7 +50,9 @@
    ["/parallel" :parallel {:GET parallel :POST lellarap}
     ["/orthogonal/:vector" :orthogonal {:PUT orthogonal}]
     ["/perpendicular/:tensor/:manifold" :perpendicular perpendicular]]
-   ["/:further" :further further]])
+   ["/:further" :further further]
+   ["/i-am-subroute/:with-keyword"
+    ["/got-keyword?" :got-keyword? got-keyword?]]])
 
 (deftest build-routes-test
   (let [routes (build-routes test-routes)
@@ -67,4 +73,15 @@
     (is (= "A IS PERPENDICULAR TO XORB" (:body (handler {:uri "/parallel/perpendicular/A/XORB"}))))
     (is (= "What are you doing out here wasteland?" (:body (handler {:uri "/wasteland"}))))
     (is (= 404 (:status (handler {:uri "/wasteland/further/nothing/here/monolith"}))))
-    (is (= "/parallel/perpendicular/line/impossible" (reverse-route routes :perpendicular {:tensor "line" :manifold "impossible"})))))
+    (is (= "/parallel/perpendicular/line/impossible" (reverse-route routes :perpendicular {:tensor "line" :manifold "impossible"})))
+    (is (= (-> {:uri "/i-am-subroute/baz/got-keyword?"}
+               handler
+               :body)
+           "baz"))
+    (is (= (-> {:uri "/i-should-match-further/dont-keyword/got-keyword?"}
+               handler
+               :status)
+           404))
+    (is  (= (->> {:with-keyword "baz"}
+                 (reverse-route routes :got-keyword?))
+            "/i-am-subroute/baz/got-keyword?"))))
