@@ -65,7 +65,7 @@
      (let [make-sub-path (partial compose-path root-path)
            step (fn [[path ident action-spec & sub-specs :as user-spec]]
                   (let [sub-path (compose-path root-path path)]
-                    (if (keyword ident)
+                    (if-not (coll? ident)
                       (into [{:compiled-path (compile-path sub-path)
                               :full-path sub-path
                               :user-spec user-spec

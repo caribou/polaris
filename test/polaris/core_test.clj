@@ -52,7 +52,9 @@
     ["/perpendicular/:tensor/:manifold" :perpendicular perpendicular]]
    ["/:further" :further further]
    ["/i-am-subroute/:with-keyword"
-    ["/got-keyword?" :got-keyword? got-keyword?]]])
+    ["/got-keyword?" :got-keyword? got-keyword?]]
+   ["/every-non-coll-is-a-valid-ident" "Neither am I a coll, nor am I a keyword"
+    home]])
 
 (deftest build-routes-test
   (let [routes (build-routes test-routes)
