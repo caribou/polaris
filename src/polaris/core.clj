@@ -1,176 +1,197 @@
 (ns polaris.core
   (:require [clojure.string :as string]
-            [clout.core :as clout]))
-
-(defrecord Route [key method path route action])
-(defrecord RouteTree [order mapping])
-
-(defn empty-routes
-  []
-  (RouteTree. [] {}))
+            [clout.core :as clout]
+            [ring.util.codec
+             :refer [url-encode]]))
 
 (defn- sanitize-method
   [method]
-  (let [method (if (or (nil? method)
-                       (and (string? method)
-                            (empty? method)))
-                 :ALL
-                 method)]
-    (keyword (string/lower-case (name method)))))
+  (-> (if (and (string? method)
+               (empty? method))
+        :ALL
+        method)
+      name
+      string/lower-case
+      keyword))
 
-;; borrowed from ring.util.codec --------------
+(defn- resolve-action-symbol
+  [action]
+  (doto (namespace action)
+    (when-not (throw (IllegalArgumentException.
+                      (str "Must be namespace qualified: " action))))
+    (-> symbol require))
+  (resolve action))
 
-(defn- double-escape [^String x]
-  (.replace x "\\" "\\\\"))
+(defn- sanitize-action-subspec
+  [subspec]
+  (doto (cond
+         (fn? subspec) subspec
+         (symbol? subspec) (resolve-action-symbol subspec))
+    (when-not (throw (IllegalArgumentException.
+                      (str "Invalid action-subspec: " subspec))))))
 
-(defn percent-encode
-  "Percent-encode every character in the given string using either the specified
-  encoding, or UTF-8 by default."
-  [unencoded & [encoding]]
-  (->> (.getBytes unencoded (or encoding "UTF-8"))
-       (map (partial format "%%%02X"))
-       (string/join)))
-
-(defn url-encode
-  "Returns the url-encoded version of the given string, using either a specified
-  encoding or UTF-8 by default."
-  [unencoded & [encoding]]
-  (string/replace
-    unencoded
-    #"[^A-Za-z0-9_~.+-]+"
-    #(double-escape (percent-encode % encoding))))
-
-;; -------------------------------------
+(defn- sanitize-action-spec
+  "Convert action-spec to a hash-map request-method->action."
+  [action-spec]
+  (if (map? action-spec)
+    (reduce-kv #(assoc %1
+                  (sanitize-method %2)
+                  (sanitize-action-subspec %3)) {} action-spec)
+    (sanitize-action-spec {:ALL action-spec})))
 
 (defn- add-optional-slash-to-route
   [route]
-  (update-in
-   route
-   [:re]
-   (fn [re]
-     (re-pattern (str re "/?")))))
+  (update-in route [:re]
+             (fn [re]
+               (re-pattern (str re "/?")))))
 
-(defn merge-route
-  [routes key method path action]
-  (let [method (sanitize-method method)
-        compiled-route (clout/route-compile path)
-        route (Route. key method path (add-optional-slash-to-route compiled-route) action)
-        mapped (assoc-in routes [:mapping key] route)]
-    (update-in mapped [:order] #(conj % route))))
+(defn- compile-path
+  [path]
+  (-> path
+      clout/route-compile
+      add-optional-slash-to-route))
 
-(defn- resolve-action-map
-  [[method action]]
-  (cond
-   (fn? action) [method action]
-   (symbol? action) [method (resolve action)]
-   (map? action) [method (:action action)]
-   :else [method action]))
+(defn- compose-path
+  [root-path sub-path]
+  (let [sub-path (string/replace sub-path #"^/" "")]
+    (-> (cond-> root-path
+          (seq sub-path) (str "/" sub-path))
+        (string/replace #"/$" ""))))
 
-(defn- action-methods
-  [methods]
-  (cond
-   (fn? methods) [[:ALL methods]]
-   (symbol? methods) [[:ALL (resolve methods)]]
-   (map? methods) (map resolve-action-map methods)
-   :else [[:ALL methods]]))
+(defn- to-routes
+  ([user-specs]
+     (to-routes "/" user-specs))
+  ([root-path user-specs]
+     (let [make-sub-path (partial compose-path root-path)
+           step (fn [[path ident action-spec & sub-specs :as user-spec]]
+                  (let [sub-path (compose-path root-path path)]
+                    (if ident
+                      (into [{:compiled-path (compile-path sub-path)
+                              :full-path sub-path
+                              :user-spec user-spec
+                              :actions (sanitize-action-spec action-spec)}]
+                            (to-routes sub-path sub-specs))
+                      (to-routes sub-path (rest user-spec)))))]
+       (->> user-specs
+            (keep step) ;; yeah, ...
+            (reduce into [])))))
 
-(declare build-route-tree)
+(defn- match-in-routes
+  [request routes]
+  (reduce (fn [_ route]
+            (when-let [match (clout/route-matches (:compiled-path route)
+                                                  request)]
+              (reduced [route match]))) nil routes))
 
-(defn build-route
-  [root-path [path key action subroutes]]
-  (let [sub-path (string/replace path #"^/" "")
-        full-path (str root-path "/" sub-path)
-        full-path (string/replace full-path #"/$" "")
-        children (build-route-tree full-path subroutes)
-        actions (action-methods action)
-        routes (map
-                (fn [[method action]]
-                  [key method full-path action])
-                actions)]
-    (concat routes children)))
+(defn- assoc-ident-lookup
+  [acc route]
+  (let [user-spec (:user-spec route)
+        [_ ident] user-spec]
+    (when-let [existing (get acc ident)]
+      (throw
+       (IllegalArgumentException.
+        (str
+         "Can not add route with ident: " ident \newline
+         "Existing spec: " \tab existing
+         "Offending spec: " \tab user-spec))))
+    (assoc acc ident route)))
 
-(defn build-route-tree
-  [root-path route-tree]
-  (mapcat (partial build-route root-path) route-tree))
+(defn- make-lookup-tables
+  [routes]
+  (reduce (fn [acc route]
+            (-> acc
+                (update-in [:by-ident]
+                           assoc-ident-lookup route)))
+          {:routes routes} routes))
 
+;; API
 (defn build-routes
-  ([route-tree] (build-routes route-tree ""))
-  ([route-tree root-path]
-     (let [routes (empty-routes)
-           built (build-route-tree root-path route-tree)]
-       (reduce
-        (fn [routes [key method path action]]
-          (merge-route routes key method path action))
-        routes built))))
+  "Create routes that can be used with router. 
 
-(defn route-matches?
-  [request route]
-  (let [request-method (:request-method request)
-        compiled-route (:route route)
-        method (:method route)
-        method-matches (or (= :all method)
-                           (= method request-method)
-                           (and (nil? request-method) (= method :get)))]
-    (when method-matches
-      (when-let [match-result (clout/route-matches compiled-route request)]
-        [route match-result]))))
+  A spec* must be a vector of either**
 
-(defn find-first
-  [p s]
-  (first (remove nil? (map p s))))
+  [path-spec ident action-spec & specs] or
 
-(defn router
-  "takes a request and performs the action associated with the matching route"
-  ([routes] (router routes (fn [request] {:status 200 :body "No action defined at this route"})))
-  ([routes default-action]
-     (fn [request]
-       (let [ordered-routes (:order routes)
-             [route match] (find-first (partial route-matches? request) ordered-routes)]
-         (if match
-           (let [request (assoc request :route-params match)
-                 request (update-in request [:params] #(merge % match))
-                 action (:action route)]
-             (if action
-               (action request)
-               (do
-                 (println (format "No action for route %s %s: %s!" (:method route) (:path route) (:key route)))
-                 (default-action request))))
-           {:status 404})))))
+  [path-spec & specs]
 
-(defn- get-path
-  [routes key]
-  (or
-   (get-in routes [:mapping (keyword key) :path])
-   (throw (new Exception (str "route for " key " not found")))))
 
-(defn sort-route-opts
-  [routes key opts]
-  (let [path (get-path routes key)
-        opt-keys (keys opts)
-        route-keys (map
-                    read-string
-                    (filter
-                     #(= (first %) \:)
-                     (string/split path #"/")))
-        query-keys (remove (into #{} route-keys) opt-keys)]
-    {:path path
-     :route (select-keys opts route-keys)
-     :query (select-keys opts query-keys)}))
+  path-spec is a string specifying a sub directory in in its
+  containing specs path-spec (by default \"/\"). It may contain
+  parameterizable sub-paths such as
+  \"/home/profiles/:username/\". These can be resolved under :params
+  in the request when it is passed to an action.
+
+  Idents can be used for reverse-routing (reverse-route). They must be
+  unique accross all specs (regardless of their nesting position).
+
+
+  action-spec is either:
+
+  - a function that will be invoked for all requests that match the
+    path
+
+  - a namespace qualified symbol that will be resolved before this
+    function returns. require will be invoked on its namespace
+
+  - a hash-map mapping request-methods to functions or namespaces
+
+
+  * specs can't be overwritten by specs with the same count of total
+    sub-paths
+
+  ** nested specs are optional in both forms"
+  [& specs]
+  (-> specs to-routes make-lookup-tables))
 
 (defn reverse-route
-  [routes key opts]
-  (let [{path :path
-         route-matches :route
-         query-matches :query} (sort-route-opts routes key opts)
-        route-keys (keys route-matches)
-        query-keys (keys query-matches)
-        opt-keys (keys opts)
-        base (reduce
-              #(string/replace-first %1 (str (keyword %2)) (get opts %2))
-              path opt-keys)
-        query-item (fn [[k v]] (str (url-encode (name k))
-                                    "="
-                                    (url-encode v)))
-        query (string/join "&" (map query-item (select-keys opts query-keys)))
-        query (and (seq query) (str "?" query))]
-    (str base query)))
+  "Reconstruct url for route at ident based on parameters in opts."
+  [routes ident opts]
+  (let [path (get-in routes [:by-ident ident :full-path])
+        [route-str opts-left]
+        (reduce (fn [[route-str opts] sub-dir]
+                  (if (= (first sub-dir) \:)
+                    (let [kw (keyword (subs sub-dir 1))]
+                      [(str route-str "/" (get opts kw))
+                       (dissoc opts kw)])
+                    [(str route-str "/" sub-dir) opts]))
+                ["" opts]
+                (filter seq (string/split path #"/")))]
+    (str route-str
+         (some->> opts-left
+                  (mapv (fn [[k v]] (str (url-encode (name k))
+                                         "="
+                                         (url-encode v))))
+                  (string/join "&")
+                  seq
+                  (str "?")))))
+
+(defn router
+  "Create a polaris request handler. Routes must have been built using
+  build-routes. 
+
+  A map with resolved parameters is merged to onto :params in requests
+  passed to resolved actions, routes can be found under :routes."
+  ([routes]
+     (router
+      routes
+      (constantly {:status 405
+                   :body "Method not allowed."})
+      (constantly {:status 404
+                   :body "Page not found."})))
+  ([routes method-not-allowed page-not-found]
+     (let [{:keys [routes]} routes]
+       (fn [{method :request-method :as request}]
+         (let [[route match]
+               (match-in-routes request routes)
+               {:keys [actions]} route
+               action (or (get actions (or method
+                                           (sanitize-method :GET)))
+                          (get actions (sanitize-method :ALL)))]
+           (if match
+             (if action
+               (-> request
+                   (assoc :routes routes)
+                   (update-in [:params] merge match)
+                   action)
+               (method-not-allowed request))
+             (page-not-found request)))))))
