@@ -58,25 +58,44 @@
           (seq sub-path) (str "/" sub-path))
         (string/replace #"/$" ""))))
 
+(defn- sanitize-routespec
+  [spec]
+  (let [[path obj1 obj2] spec
+        idents (cond (keyword? obj1) #{obj1}
+                     (set? obj1) obj1)]
+    (merge {:path path}
+           (if idents
+             {:idents idents
+              :action-spec obj2
+              :sub-specs (drop 3 spec)}
+             (if (sequential? obj1)
+               {:sub-specs (rest spec)}
+               {:action-spec obj1
+                :sub-specs (drop 2 spec)})))))
+
 (defn- to-routes
   ([user-specs]
      (to-routes "" user-specs))
   ([root-path user-specs]
      (let [make-sub-path (partial compose-path root-path)
-           step (fn [[path ident action-spec & sub-specs :as user-spec]]
-                  (if-not (coll? path)
-                    (let [sub-path (compose-path root-path path)]
-                      (if-not (coll? ident)
-                        (into [{:compiled-path (compile-path sub-path)
-                                :full-path sub-path
-                                :user-spec user-spec
-                                :actions (sanitize-action-spec action-spec)}]
-                              (to-routes sub-path sub-specs))
-                        (to-routes sub-path (rest user-spec))))
+           step (fn [user-spec]
+                  (if-not (coll? (first user-spec))
+                    (let [{:keys [idents path action-spec sub-specs] :as dbg}
+                          (sanitize-routespec user-spec)
+                          sub-path (compose-path root-path path)]
+                      (-> {:compiled-path (compile-path sub-path)
+                           :full-path sub-path
+                           :idents idents}
+                          (cond->
+                            action-spec
+                            (assoc :actions
+                              (sanitize-action-spec action-spec)))
+                          vector
+                          (into (to-routes sub-path sub-specs))))
                     ;; unnest:
                     (to-routes root-path user-spec)))]
        (->> user-specs
-            (keep step) ;; yeah, ...
+            (mapv step)
             (reduce into [])))))
 
 (defn- match-in-routes
@@ -88,16 +107,17 @@
 
 (defn- assoc-ident-lookup
   [acc route]
-  (let [user-spec (:user-spec route)
-        [_ ident] user-spec]
-    (when-let [existing (get acc ident)]
-      (throw
-       (IllegalArgumentException.
-        (str
-         "Can not add route with ident: " ident \newline
-         "Existing spec: " \tab existing
-         "Offending spec: " \tab user-spec))))
-    (assoc acc ident route)))
+  (let [idents (:idents route)]
+    (doseq [ident idents]
+      (when-let [existing (get acc ident)]
+        (throw
+         (IllegalArgumentException.
+          (str
+           "Can not add route with ident: " ident \newline
+           "Existing spec: " \tab existing
+           "At path: " \tab (:full-path route))))))
+    (merge acc
+           (zipmap idents (repeat route)))))
 
 (defn- make-lookup-tables
   [routes]
@@ -112,11 +132,13 @@
   "Create routes that can be used with router. 
 
   Specs will be matched in the order they are provided, regardless of
-  their nesting depth.
+  their hierachy level.
 
   A spec* must be a vector of either**
 
   [path-spec ident action-spec & specs] or
+
+  [path-spec action-spec] or
 
   [path-spec & specs]
 
@@ -127,10 +149,10 @@
   \"/home/profiles/:username/\". These can be resolved under :params
   in the request when it is passed to an action.
 
-  Idents can used for reverse-routing (reverse-route). They can be any
-  value that is not a coll and must be unique accross all
-  specs (regardless of their nesting depth).
-
+  Idents can used for reverse-routing (reverse-route). They must be
+  keywords and are optional. Multiple idents for one route may be
+  specified in a set instead of a single keyword. Each ident used in
+  the overall spec must be unique.
 
   action-spec is either:
 
@@ -142,8 +164,7 @@
 
   - a hash-map mapping request-methods to functions or namespaces
 
-  * specs may be contained in vectors, but must not
-  ** nested specs are optional in both forms"
+  * multiple specs may be grouped in an extra vector, but must not"
   [& specs]
   (-> specs to-routes make-lookup-tables))
 

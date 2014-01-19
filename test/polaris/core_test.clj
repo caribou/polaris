@@ -50,11 +50,11 @@
    ["parallel" :parallel {:GET parallel :POST lellarap}
     [["/orthogonal/:vector" :orthogonal {:PUT orthogonal}]
      ["/perpendicular/:tensor/:manifold" :perpendicular perpendicular]]]
+   ["/idents-are-optional" home]
+   ["/many-are-possible-too" #{:the-ident :the-many :we-all-lead-here} home]
    ["/:further" :further further]
    ["/i-am-subroute/:with-keyword"
-    ["/got-keyword?" :got-keyword? got-keyword?]]
-   ["/every-non-coll-is-a-valid-ident" "Neither am I a coll, nor am I a keyword"
-    home]])
+    ["/got-keyword?" :got-keyword? got-keyword?]]])
 
 (deftest build-routes-test
   (let [routes (build-routes test-routes)
@@ -86,4 +86,7 @@
            404))
     (is  (= (->> {:with-keyword "baz"}
                  (reverse-route routes :got-keyword?))
-            "/i-am-subroute/baz/got-keyword?"))))
+            "/i-am-subroute/baz/got-keyword?"))
+    (is (= "YOU ARE HOME"
+           (:body (handler {:uri "/idents-are-optional"}))
+           (:body (handler {:uri "/many-are-possible-too"}))))))
