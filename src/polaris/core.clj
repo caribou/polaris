@@ -52,11 +52,12 @@
       add-optional-slash-to-route))
 
 (defn- compose-path
-  [root-path sub-path]
-  (let [sub-path (string/replace sub-path #"^/" "")]
-    (-> (cond-> root-path
-          (seq sub-path) (str "/" sub-path))
-        (string/replace #"/$" ""))))
+  [& sub-paths]
+  (->> sub-paths
+       (mapcat #(string/split % #"/"))
+       (keep not-empty)
+       (interleave (repeat "/"))
+       string/join))
 
 (defn- sanitize-routespec
   [spec]
@@ -75,7 +76,7 @@
 
 (defn- to-routes
   ([user-specs]
-     (to-routes "" user-specs))
+     (to-routes "/" user-specs))
   ([root-path user-specs]
      (let [make-sub-path (partial compose-path root-path)
            step (fn [user-spec]
@@ -168,29 +169,41 @@
   [& specs]
   (-> specs to-routes make-lookup-tables))
 
+(defn- build-query-string
+  [opts-map]
+  (str (some->> opts-map
+                (mapv (fn [[k v]] (str (url-encode (name k))
+                                       "="
+                                       (url-encode v))))
+                (string/join "&")
+                not-empty
+                (str "?"))))
+
 (defn reverse-route
-  "Reconstruct url for route at ident based on parameters in opts
-  (optional)."
-  ([routes ident] (reverse-route ident {}))
-  ([routes ident opts]
+  "Reconstruct url for route at ident based on parameters in params
+  (optional). opts may specify the following settings in a hash-map
+
+  :no-query When set to logical true, don't append a query-string like
+  ?unmatched-param=its-val for params that could not be used to name
+  sub-dirs in the route."
+  ([routes ident] (reverse-route routes ident {}))
+  ([routes ident params] (reverse-route routes ident params {}))
+  ([routes ident params opts]
      (let [path (get-in routes [:by-ident ident :full-path])
-           [route-str opts-left]
-           (reduce (fn [[route-str opts] sub-dir]
-                     (if (= (first sub-dir) \:)
-                       (let [kw (keyword (subs sub-dir 1))]
-                         [(str route-str "/" (get opts kw))
-                          (dissoc opts kw)])
-                       [(str route-str "/" sub-dir) opts]))
-                   ["" opts]
-                   (filter seq (string/split path #"/")))]
-       (str route-str
-            (some->> opts-left
-                     (mapv (fn [[k v]] (str (url-encode (name k))
-                                            "="
-                                            (url-encode v))))
-                     (string/join "&")
-                     seq
-                     (str "?"))))))
+           [sub-dirs params-left]
+           (->> (string/split path #"/")
+                (filter seq)
+                (reduce (fn [[sub-dirs params-left] sub-dir]
+                          (if (= (first sub-dir) \:)
+                            (let [kw (keyword (subs sub-dir 1))]
+                              [(conj sub-dirs (get params-left kw))
+                               (dissoc params-left kw)])
+                            [(conj sub-dirs sub-dir)
+                             params-left]))
+                        [[] params]))]
+       (cond-> (apply compose-path sub-dirs)
+         (not (:no-query opts))
+         (str (build-query-string params-left))))))
 
 (defn router
   "Create a Polaris request handler. Routes must have been built using
