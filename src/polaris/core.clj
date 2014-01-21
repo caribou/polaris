@@ -52,12 +52,23 @@
       add-optional-slash-to-route))
 
 (defn- compose-path
+  "Multi-purpose path-builder:
+
+  Split sub-paths into more sub-paths if they contain slashes, replace
+  batched slashes with a single slash, concat all sub-paths with
+  slashes between them.
+
+  If no sub-paths could be composed, return the empty-string.
+
+  Sub-paths must be strings, not nil."
   [& sub-paths]
-  (->> sub-paths
-       (mapcat #(string/split % #"/"))
-       (keep not-empty)
-       (interleave (repeat "/"))
-       string/join))
+  (let [path (->> sub-paths
+                  (mapcat #(string/split % #"/"))
+                  (keep not-empty)
+                  (string/join "/"))]
+    (if (empty? path)
+      ""
+      (str "/" path))))
 
 (defn- sanitize-routespec
   [spec]
@@ -81,22 +92,21 @@
      (let [make-sub-path (partial compose-path root-path)
            step (fn [user-spec]
                   (if-not (coll? (first user-spec))
-                    (let [{:keys [idents path action-spec sub-specs] :as dbg}
+                    (let [{:keys [idents path action-spec sub-specs]}
                           (sanitize-routespec user-spec)
                           sub-path (compose-path root-path path)]
-                      (-> {:compiled-path (compile-path sub-path)
-                           :full-path sub-path
-                           :idents idents}
+                      (-> []
                           (cond->
                             action-spec
-                            (assoc :actions
-                              (sanitize-action-spec action-spec)))
-                          vector
+                            (conj {:compiled-path (compile-path sub-path)
+                                   :full-path sub-path
+                                   :idents idents
+                                   :actions (sanitize-action-spec action-spec)}))
                           (into (to-routes sub-path sub-specs))))
                     ;; unnest:
                     (to-routes root-path user-spec)))]
        (->> user-specs
-            (mapv step)
+            (keep step)
             (reduce into [])))))
 
 (defn- match-in-routes
@@ -189,14 +199,15 @@
   ([routes ident] (reverse-route routes ident {}))
   ([routes ident params] (reverse-route routes ident params {}))
   ([routes ident params opts]
-     (let [path (get-in routes [:by-ident ident :full-path])
+     (let [path (get-in routes [:by-ident (keyword ident) :full-path])
            [sub-dirs params-left]
            (->> (string/split path #"/")
                 (filter seq)
                 (reduce (fn [[sub-dirs params-left] sub-dir]
                           (if (= (first sub-dir) \:)
                             (let [kw (keyword (subs sub-dir 1))]
-                              [(conj sub-dirs (get params-left kw))
+                              [(conj sub-dirs (or (str (get params-left kw))
+                                                  sub-dir))
                                (dissoc params-left kw)])
                             [(conj sub-dirs sub-dir)
                              params-left]))
