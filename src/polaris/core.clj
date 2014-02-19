@@ -88,26 +88,22 @@
 (defn- to-routes
   ([user-specs]
      (to-routes "/" user-specs))
-  ([root-path user-specs]
-     (let [make-sub-path (partial compose-path root-path)
-           step (fn [user-spec]
-                  (if-not (coll? (first user-spec))
-                    (let [{:keys [idents path action-spec sub-specs]}
-                          (sanitize-routespec user-spec)
-                          sub-path (compose-path root-path path)]
-                      (-> []
-                          (cond->
-                            action-spec
-                            (conj {:compiled-path (compile-path sub-path)
-                                   :full-path sub-path
-                                   :idents idents
-                                   :actions (sanitize-action-spec action-spec)}))
-                          (into (to-routes sub-path sub-specs))))
-                    ;; unnest:
-                    (to-routes root-path user-spec)))]
-       (->> user-specs
-            (keep step)
-            (reduce into [])))))
+  ([root-path user-spec]
+     (if-not (or (empty? user-spec)
+                 (coll? (first user-spec)))
+       (let [{:keys [idents path action-spec sub-specs]}
+             (sanitize-routespec user-spec)
+             sub-path (compose-path root-path path)]
+         (-> []
+             (cond->
+              action-spec
+              (conj {:compiled-path (compile-path sub-path)
+                     :full-path sub-path
+                     :idents idents
+                     :actions (sanitize-action-spec action-spec)}))
+             (into (to-routes sub-path sub-specs))))
+       ;; unnest:
+       (mapcat (partial to-routes root-path) user-spec))))
 
 (defn- match-in-routes
   [request routes]
