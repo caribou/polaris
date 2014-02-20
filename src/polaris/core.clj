@@ -26,6 +26,7 @@
   [subspec]
   (doto (cond
          (fn? subspec) subspec
+         (var? subspec) subspec
          (symbol? subspec) (resolve-action-symbol subspec))
     (when-not (throw (IllegalArgumentException.
                       (str "Invalid action-subspec: " subspec))))))
@@ -120,7 +121,7 @@
         (throw
          (IllegalArgumentException.
           (str
-           "Can not add route with ident: " ident \newline
+           "Can't add route with ident: " ident \newline
            "Existing spec: " \tab existing
            "At path: " \tab (:full-path route))))))
     (merge acc
