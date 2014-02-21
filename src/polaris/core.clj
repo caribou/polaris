@@ -71,40 +71,71 @@
       ""
       (str "/" path))))
 
-(defn- sanitize-routespec
-  [spec]
-  (let [[path obj1 obj2] spec
-        idents (cond (keyword? obj1) #{obj1}
-                     (set? obj1) obj1)]
-    (merge {:path path}
-           (if idents
-             {:idents idents
-              :action-spec obj2
-              :sub-specs (drop 3 spec)}
-             (if (sequential? obj1)
-               {:sub-specs (rest spec)}
-               {:action-spec obj1
-                :sub-specs (drop 2 spec)})))))
+(defn- sanitize-user-specs
+  [specs]
+  (cond
+   (coll? (first specs)) (not-empty
+                          (mapcat sanitize-user-specs specs))
+   (seq specs)
+   (let [[path obj1 obj2] specs
+         idents (cond (keyword? obj1) #{obj1}
+                      (set? obj1) obj1)]
+     [(merge {:path (compose-path path)}
+             (if idents
+               {:idents idents
+                :action-spec (sanitize-action-spec obj2)
+                :sub-specs (->> specs
+                                (drop 3)
+                                sanitize-user-specs)}
+               (if (sequential? obj1)
+                 {:sub-specs (->> specs
+                                  rest
+                                  sanitize-user-specs)}
+                 {:action-spec (sanitize-action-spec obj1)
+                  :sub-specs (->> specs
+                                  (drop 2)
+                                  sanitize-user-specs)})))])))
+
+(defn- merge-specs-by-path
+  "If multiple routes are specified with the same path on one level,
+  merge them ontop of each other."  
+  [specs]
+  (->> specs
+       (map :path)
+       distinct
+       (map (group-by :path specs))
+       (map (fn [specs]
+              (-> (reduce #(-> %1
+                               (update-in [:idents]
+                                          (fnil into #{}) (:idents %2))
+                               (update-in [:action-spec]
+                                          merge (:action-spec %2))
+                               (update-in [:sub-specs]
+                                          concat (:sub-specs %2)))
+                          specs)
+                  (update-in [:sub-specs]
+                             #(some-> % merge-specs-by-path)))))))
+
+(defn- compile-specs
+  "Generate full sub-paths and compile Clout routes."
+  [root-path specs]
+  (letfn [(step [{:keys [idents path action-spec sub-specs] :as spec}]
+            (let [sub-path (compose-path root-path path)]
+              (-> []
+                  (cond-> action-spec
+                          (conj (assoc spec
+                                  :compiled-path (compile-path sub-path)
+                                  :full-path sub-path)))
+                  (into (compile-specs sub-path sub-specs)))))]
+    (mapcat step specs)))
 
 (defn- to-routes
-  ([user-specs]
-     (to-routes "/" user-specs))
-  ([root-path user-spec]
-     (if-not (or (empty? user-spec)
-                 (coll? (first user-spec)))
-       (let [{:keys [idents path action-spec sub-specs]}
-             (sanitize-routespec user-spec)
-             sub-path (compose-path root-path path)]
-         (-> []
-             (cond->
-              action-spec
-              (conj {:compiled-path (compile-path sub-path)
-                     :full-path sub-path
-                     :idents idents
-                     :actions (sanitize-action-spec action-spec)}))
-             (into (to-routes sub-path sub-specs))))
-       ;; unnest:
-       (mapcat (partial to-routes root-path) user-spec))))
+  ([user-specs] (to-routes "/" user-specs))
+  ([root-path user-specs]
+     (->> user-specs
+          (sanitize-user-specs)
+          (merge-specs-by-path)
+          (compile-specs root-path))))
 
 (defn- match-in-routes
   [request routes]
@@ -139,28 +170,25 @@
 (defn build-routes
   "Create routes that can be used with router. 
 
-  Specs will be matched in the order they are provided, regardless of
-  their hierachy level.
+  A spec must be a vector of either
 
-  A spec* must be a vector of either**
-
-  [path-spec ident action-spec & specs] or
+  [path-spec ident action-spec & specs*] or
 
   [path-spec action-spec] or
 
-  [path-spec & specs]
+  [path-spec & specs*]
 
 
-  path-spec is a string specifying a sub directory in in its
-  containing specs path-spec (by default \"/\"). It may contain
-  parameterizable sub-paths such as
-  \"/home/profiles/:username/\". These can be resolved under :params
-  in the request when it is passed to an action.
+  path-spec is a string specifying the parent directory (by default
+  \"/\") of nested specs. It may contain parameterizable sub-paths
+  such as \"/home/profiles/:username/\". These can be resolved
+  under :params in the request when it is passed to an action.
 
   Idents can used for reverse-routing (reverse-route). They must be
   keywords and are optional. Multiple idents for one route may be
-  specified in a set instead of a single keyword. Each ident used in
-  the overall spec must be unique.
+  specified in a set instead of a single keyword. The same idents may
+  be used exclusively in specs that have identical paths and reside on
+  one level.
 
   action-spec is either:
 
@@ -170,9 +198,16 @@
   - a namespace qualified symbol that will be resolved before this
     function returns. require will be invoked on its namespace
 
-  - a hash-map mapping request-methods to functions or namespaces
+  - a var that can be resolved to a function at request time
 
-  * multiple specs may be grouped in an extra vector, but must not"
+  - a hash-map mapping request-methods to one of those
+
+
+  Specs will be matched in the order they are provided, regardless of
+  their hierachy level, unless they are on the same level and have the
+  same path in which case their action-specs and idents are merged.
+
+  * multiple specs may be grouped in an extra vector"
   [& specs]
   (-> specs to-routes make-lookup-tables))
 
@@ -231,10 +266,10 @@
        (fn [{method :request-method :as request}]
          (let [[route match]
                (match-in-routes request routes)
-               {:keys [actions]} route
-               action (or (get actions (or method
+               {:keys [action-spec]} route
+               action (or (get action-spec (or method
                                            (sanitize-method :GET)))
-                          (get actions (sanitize-method :ALL)))]
+                          (get action-spec (sanitize-method :ALL)))]
            (if match
              (if action
                (-> request
