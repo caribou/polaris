@@ -38,20 +38,28 @@
   [request]
   {:status 200 :body (str "What are you doing out here " (-> request :params :further) "?")})
 
+(defn got-keyword?
+  [request]
+  {:status 200 :body (str (get-in request [:params :with-keyword]))})
+
 (def test-routes
   [["/" :home home
-    [["/child" :child child
-      [["/grandchild/:face" :grandchild grandchild]]]
-     ["/sibling/:hand" :sibling sibling]]]
-   ["/parallel" :parallel {:GET parallel :POST lellarap}
+     [["/child" :child child
+       [["/grandchild/:face" :grandchild grandchild]]]
+      ["/sibling/:hand" :sibling sibling]]]
+   ["parallel" :parallel {:GET parallel :POST lellarap}
     [["/orthogonal/:vector" :orthogonal {:PUT orthogonal}]
      ["/perpendicular/:tensor/:manifold" :perpendicular perpendicular]]]
-   ["/:further" :further further]])
+   ["/idents-are-optional" home]
+   ["/many-are-possible-too" #{:the-ident :the-many :we-all-lead-here} home]
+   ["/:further" :further further]
+   ["/i-am-subroute/:with-keyword"
+    ["/got-keyword?" :got-keyword? got-keyword?]]])
 
 (deftest build-routes-test
   (let [routes (build-routes test-routes)
         handler (router routes)]
-    (println routes)
+    #_(println routes)
     (is (= "YOU ARE HOME" (:body (handler {:uri ""}))))
     (is (= "YOU ARE HOME" (:body (handler {:uri "/"}))))
     (is (= "child playing with routers" (:body (handler {:uri "/child"}))))
@@ -62,9 +70,23 @@
     (is (= "ALTERNATE DIMENsion ---------" (:body (handler {:uri "/parallel/"}))))
     (is (= "--------- noisNEMID ETANRETLA" (:body (handler {:uri "/parallel/" :request-method :post}))))
     (is (= "ORTHOGONAL TO OVOID" (:body (handler {:uri "/parallel/orthogonal/OVOID" :request-method :put}))    ))
-    (is (= 404 (:status (handler {:uri "/parallel/orthogonal/OVOID" :request-method :delete}))))
-    (is (= 404 (:status (handler {:uri "/parallel/orthogonal/OVOID"}))))
+    (is (= 405 (:status (handler {:uri "/parallel/orthogonal/OVOID" :request-method :delete}))))
+    (is (= 405 (:status (handler {:uri "/parallel/orthogonal/OVOID"}))))
     (is (= "A IS PERPENDICULAR TO XORB" (:body (handler {:uri "/parallel/perpendicular/A/XORB"}))))
     (is (= "What are you doing out here wasteland?" (:body (handler {:uri "/wasteland"}))))
     (is (= 404 (:status (handler {:uri "/wasteland/further/nothing/here/monolith"}))))
-    (is (= "/parallel/perpendicular/line/impossible" (reverse-route routes :perpendicular {:tensor "line" :manifold "impossible"})))))
+    (is (= "/parallel/perpendicular/line/impossible" (reverse-route routes :perpendicular {:tensor "line" :manifold "impossible"})))
+    (is (= (-> {:uri "/i-am-subroute/baz/got-keyword?"}
+               handler
+               :body)
+           "baz"))
+    (is (= (-> {:uri "/i-should-match-further/dont-keyword/got-keyword?"}
+               handler
+               :status)
+           404))
+    (is  (= (->> {:with-keyword "baz"}
+                 (reverse-route routes :got-keyword?))
+            "/i-am-subroute/baz/got-keyword?"))
+    (is (= "YOU ARE HOME"
+           (:body (handler {:uri "/idents-are-optional"}))
+           (:body (handler {:uri "/many-are-possible-too"}))))))
