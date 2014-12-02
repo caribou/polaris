@@ -22,14 +22,24 @@
     (-> symbol require))
   (resolve action))
 
-(defn- sanitize-action-subspec
-  [subspec]
-  (doto (cond
-         (fn? subspec) subspec
-         (var? subspec) subspec
-         (symbol? subspec) (resolve-action-symbol subspec))
-    (when-not (throw (IllegalArgumentException.
-                      (str "Invalid action-subspec: " subspec))))))
+(defmulti add-handler type)
+
+(defmethod add-handler clojure.lang.Symbol
+  [s]
+  (resolve-action-symbol s))
+
+(defmethod add-handler clojure.lang.AFn
+  [f]
+  f)
+
+(defmethod add-handler clojure.lang.Var
+  [v]
+  v)
+
+(defmethod add-handler :default
+  [x]
+  (throw (IllegalArgumentException.
+          (str "Invalid action-subspec: " x))))
 
 (defn- sanitize-action-spec
   "Convert action-spec to a hash-map request-method->action."
@@ -37,7 +47,7 @@
   (if (map? action-spec)
     (reduce-kv #(assoc %1
                   (sanitize-method %2)
-                  (sanitize-action-subspec %3)) {} action-spec)
+                  (add-handler %3)) {} action-spec)
     (recur {:ALL action-spec})))
 
 (defn- add-optional-slash-to-route
