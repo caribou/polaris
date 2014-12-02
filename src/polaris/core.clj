@@ -41,16 +41,6 @@
   (throw (IllegalArgumentException.
           (str "Invalid action-subspec: " x))))
 
-(defn- sanitize-action-subspec
-  [subspec]
-  (doto (cond
-         (symbol? subspec) (resolve-action-symbol subspec)
-         (instance? subspec clojure.lang.AFn) subspec
-         (fn? subspec) subspec
-         (var? subspec) subspec)
-    (when-not (throw (IllegalArgumentException.
-                      (str "Invalid action-subspec: " subspec))))))
-
 (defn- sanitize-action-spec
   "Convert action-spec to a hash-map request-method->action."
   [action-spec]
