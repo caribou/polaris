@@ -1,6 +1,7 @@
 (ns polaris.core-test
-  (:require [clojure.test :refer :all]
-            [polaris.core :refer :all]))
+  (:require
+   [clojure.test :refer :all]
+   [polaris.core :refer :all]))
 
 (defn home
   [request]
@@ -47,6 +48,12 @@
     [["/orthogonal/:vector" :orthogonal {:PUT orthogonal}]
      ["/perpendicular/:tensor/:manifold" :perpendicular perpendicular]]]
    ["/:further" :further further]])
+
+(deftest single-route-test
+  (let [routes (build-routes [["/" :home home]])
+        handler (router routes)]
+    (is (= "YOU ARE HOME" (:body (handler {:uri ""}))))
+    (is (= "YOU ARE HOME" (:body (handler {:uri "/"}))))))
 
 (deftest build-routes-test
   (let [routes (build-routes test-routes)

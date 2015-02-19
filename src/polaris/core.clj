@@ -1,6 +1,8 @@
 (ns polaris.core
-  (:require [clojure.string :as string]
-            [clout.core :as clout]))
+  (:require
+   [clojure.string :as string]
+   [ring.util.codec :as codec]
+   [clout.core :as clout]))
 
 (defrecord Route [key method path route action])
 (defrecord RouteTree [order mapping])
@@ -9,38 +11,36 @@
   []
   (RouteTree. [] {}))
 
+(defn- resolve-action-symbol
+  [action]
+  (let [space (namespace action)]
+    (when-not space
+      (throw (IllegalArgumentException. (str "Must be namespace qualified: " action))))
+    (-> space symbol require))
+  (resolve action))
+
+(defmulti resolve-action type)
+(defmethod resolve-action clojure.lang.Symbol [s] (resolve-action-symbol s))
+(defmethod resolve-action clojure.lang.AFn [f] f)
+(defmethod resolve-action clojure.lang.Var [v] v)
+(defmethod resolve-action :default
+  [x]
+  (throw
+   (IllegalArgumentException.
+    (str "Invalid action type " (-> x class str) " for " x))))
+
+(defn empty-method?
+  [method]
+  (or
+   (nil? method)
+   (and
+    (string? method)
+    (empty? method))))
+
 (defn- sanitize-method
   [method]
-  (let [method (if (or (nil? method)
-                       (and (string? method)
-                            (empty? method)))
-                 :ALL
-                 method)]
-    (keyword (string/lower-case (name method)))))
-
-;; borrowed from ring.util.codec --------------
-
-(defn- double-escape [^String x]
-  (.replace x "\\" "\\\\"))
-
-(defn percent-encode
-  "Percent-encode every character in the given string using either the specified
-  encoding, or UTF-8 by default."
-  [unencoded & [encoding]]
-  (->> (.getBytes unencoded (or encoding "UTF-8"))
-       (map (partial format "%%%02X"))
-       (string/join)))
-
-(defn url-encode
-  "Returns the url-encoded version of the given string, using either a specified
-  encoding or UTF-8 by default."
-  [unencoded & [encoding]]
-  (string/replace
-    unencoded
-    #"[^A-Za-z0-9_~.+-]+"
-    #(double-escape (percent-encode % encoding))))
-
-;; -------------------------------------
+  (let [method (if (empty-method? method) :ALL method)]
+    (-> method name string/lower-case keyword)))
 
 (defn- add-optional-slash-to-route
   [route]
@@ -58,21 +58,11 @@
         mapped (assoc-in routes [:mapping key] route)]
     (update-in mapped [:order] #(conj % route))))
 
-(defn- resolve-action-map
-  [[method action]]
-  (cond
-   (fn? action) [method action]
-   (symbol? action) [method (resolve action)]
-   (map? action) [method (:action action)]
-   :else [method action]))
-
 (defn- action-methods
-  [methods]
-  (cond
-   (fn? methods) [[:ALL methods]]
-   (symbol? methods) [[:ALL (resolve methods)]]
-   (map? methods) (map resolve-action-map methods)
-   :else [[:ALL methods]]))
+  [action]
+  (if (map? action)
+    action
+    [[:ALL action]]))
 
 (declare build-route-tree)
 
@@ -119,22 +109,25 @@
   [p s]
   (first (remove nil? (map p s))))
 
+(defn default-action
+  [request]
+  {:status 200
+   :body "No action defined at this route"})
+
 (defn router
   "takes a request and performs the action associated with the matching route"
-  ([routes] (router routes (fn [request] {:status 200 :body "No action defined at this route"})))
-  ([routes default-action]
+  ([routes] (router routes default-action))
+  ([routes default]
      (fn [request]
        (let [ordered-routes (:order routes)
              [route match] (find-first (partial route-matches? request) ordered-routes)]
          (if match
            (let [request (assoc request :route-params match)
                  request (update-in request [:params] #(merge % match))
-                 action (:action route)]
+                 action (-> route :action resolve-action)]
              (if action
                (action request)
-               (do
-                 (println (format "No action for route %s %s: %s!" (:method route) (:path route) (:key route)))
-                 (default-action request))))
+               (default request)))
            {:status 404})))))
 
 (defn- get-path
@@ -160,9 +153,9 @@
 (defn query-item
   [[k v]] 
   (str 
-   (url-encode (name k))
+   (codec/url-encode (name k))
    "="
-   (url-encode v)))
+   (codec/url-encode v)))
 
 (defn build-query-string
   [params query-keys]
