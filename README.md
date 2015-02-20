@@ -12,7 +12,7 @@ Also, provides reverse routing for building urls from parameters!
 
 #### Leiningen
 
-    [polaris "0.0.2"]
+    [polaris "0.0.11"]
 
 ## Usage
 
@@ -96,6 +96,35 @@ Handlers can be scoped to different request methods:
 (handler {:uri "/method-sensitive"}) ;; ---> {:status 200 :body "The method defaults to GET"}
 (handler {:uri "/method-sensitive" :request-method :post}) ;; --> {:status 200 :body "This is a POST"}
 (handler {:uri "/method-sensitive" :request-method :delete}) ;; --> {:status 200 :body "DELETED!!"}
+```
+
+### Subtree Middleware
+
+You can define middleware for a path and all subpaths relative to that path (the *subtree*).  Because middleware forms a stack around the original handler, there are two different ways to add it to the three:  *float* and *sink*.  If you *float* the middleware, it will compose itself at the outermost layer of middleware currently defined for that handler.  Since each path can inherit middleware from paths above it, this stack can grow arbitrarily deep.  If you *sink* the middleware, it will go to the bottom of this stack (ie. run right before the handler).  If deeper down another middleware is sunk, it will go inside even this one.  
+
+```clj
+(defn sea-floor
+  [request]
+  {:status 200
+   :body "A sandy sea floor"})
+
+(defn anemone
+  [app]
+  (fn [request]
+    (update-in (app request) [:body] #(str % " covered in anemone"))))
+
+(defn boat
+  [app]
+  (fn [request]
+    (update-in (app request) [:body] #(str % " underneath a small boat"))))
+
+(def route-definitions
+  [["/ocean" :base {:ALL sea-floor :sink anemone :float boat}]])
+
+(def routes (polaris.core/build-routes route-definitions))
+(def handler (polaris.core/router routes))
+
+(handler {:uri "/ocean"}) ;; ---> {:status 200 :body "A sandy sea floor covered in anemone underneath a small boat"}
 ```
 
 ### Reverse Routing
