@@ -58,36 +58,44 @@
         mapped (assoc-in routes [:mapping key] route)]
     (update-in mapped [:order] #(conj % route))))
 
+(def method-types [:ANY :GET :PUT :POST :DELETE])
+
 (defn- action-methods
   [action]
   (if (map? action)
-    action
+    (select-keys action method-types)
     [[:ALL action]]))
 
 (declare build-route-tree)
 
+(defn compose-wrapper
+  [prepend wrapper append]
+  (apply comp (filter identity [append wrapper prepend])))
+
 (defn build-route
-  [root-path [path key action subroutes]]
+  [root-path wrapper [path key action subroutes]]
   (let [sub-path (string/replace path #"^/" "")
         full-path (str root-path "/" sub-path)
         full-path (string/replace full-path #"/$" "")
-        children (build-route-tree full-path subroutes)
+        {:keys [prepend append]} action
+        wrapper (compose-wrapper prepend wrapper append)
+        children (build-route-tree full-path wrapper subroutes)
         actions (action-methods action)
         routes (map
                 (fn [[method action]]
-                  [key method full-path action])
+                  [key method full-path (wrapper action)])
                 actions)]
     (concat routes children)))
 
 (defn build-route-tree
-  [root-path route-tree]
-  (mapcat (partial build-route root-path) route-tree))
+  [root-path wrapper route-tree]
+  (mapcat (partial build-route root-path wrapper) route-tree))
 
 (defn build-routes
   ([route-tree] (build-routes route-tree ""))
   ([route-tree root-path]
      (let [routes (empty-routes)
-           built (build-route-tree root-path route-tree)]
+           built (build-route-tree root-path identity route-tree)]
        (reduce
         (fn [routes [key method path action]]
           (merge-route routes key method path action))
