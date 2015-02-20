@@ -90,6 +90,11 @@
     (is (= "/parallel/perpendicular/line/impossible" (reverse-route routes :perpendicular {:tensor "line" :manifold "impossible"})))
     (is (= "/parallel/perpendicular/line/impossible?bar=yellow" (reverse-route routes :perpendicular {:tensor "line" :manifold "impossible" :bar "yellow"})))))
 
+(defn ocean-rock
+  [request]
+  {:status 200
+   :body "An ocean rock"})
+
 (defn sea-floor
   [request]
   {:status 200
@@ -106,10 +111,12 @@
     (update-in (app request) [:body] #(str % " underneath a small boat"))))
 
 (def sea-routes
-  [["/ocean" :base {:ALL sea-floor :sink anemone :float boat}]])
+  [["/ocean" :ocean {:ALL ocean-rock :sink anemone :float boat}
+    [["/floor" :floor sea-floor]]]])
 
 (deftest sea-routes-test
   (let [routes (polaris.core/build-routes sea-routes)
         handler (polaris.core/router routes)]
-    (is (= "A sandy sea floor covered in anemone underneath a small boat" (:body (handler {:uri "/ocean"}))))))
+    (is (= "An ocean rock covered in anemone underneath a small boat" (:body (handler {:uri "/ocean"}))))
+    (is (= "A sandy sea floor covered in anemone underneath a small boat" (:body (handler {:uri "/ocean/floor"}))))))
 
