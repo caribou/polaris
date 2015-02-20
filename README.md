@@ -100,7 +100,7 @@ Handlers can be scoped to different request methods:
 
 ### Subtree Middleware
 
-You can define middleware for a path and all subpaths relative to that path (the *subtree*).  Because middleware forms a stack around the original handler, there are two different ways to add it to the three:  *float* and *sink*.  If you *float* the middleware, it will compose itself at the outermost layer of middleware currently defined for that handler.  Since each path can inherit middleware from paths above it, this stack can grow arbitrarily deep.  If you *sink* the middleware, it will go to the bottom of this stack (ie. run right before the handler).  If deeper down another middleware is sunk, it will go inside even this one.  
+You can define middleware for a path and all subpaths relative to that path (the **subtree**).  Because middleware forms a stack around the original handler, there are two different ways to add it to the three:  **float** and **sink**.  If you **float** the middleware, it will compose itself at the outermost layer of middleware currently defined for that handler.  Since each path can inherit middleware from paths above it, this stack can grow arbitrarily deep.  If you **sink** the middleware, it will go to the bottom of this stack (ie. run right before the handler).  If deeper down another middleware is sunk, it will go inside even this one.  
 
 ```clj
 (defn sea-floor
