@@ -11,6 +11,11 @@
   []
   (RouteTree. [] {}))
 
+(defn default-action
+  [request]
+  {:status 500
+   :body "No action defined at this route"})
+
 (defn- resolve-action-symbol
   [action]
   (let [space (namespace action)]
@@ -69,16 +74,16 @@
 (declare build-route-tree)
 
 (defn compose-wrapper
-  [prepend wrapper append]
-  (apply comp (filter identity [append wrapper prepend])))
+  [float wrapper sink]
+  (apply comp (filter identity [float wrapper sink])))
 
 (defn build-route
   [root-path wrapper [path key action subroutes]]
   (let [sub-path (string/replace path #"^/" "")
         full-path (str root-path "/" sub-path)
         full-path (string/replace full-path #"/$" "")
-        {:keys [prepend append]} action
-        wrapper (compose-wrapper prepend wrapper append)
+        {:keys [float sink]} action
+        wrapper (compose-wrapper float wrapper sink)
         children (build-route-tree full-path wrapper subroutes)
         actions (action-methods action)
         routes (map
@@ -116,11 +121,6 @@
 (defn find-first
   [p s]
   (first (remove nil? (map p s))))
-
-(defn default-action
-  [request]
-  {:status 200
-   :body "No action defined at this route"})
 
 (defn router
   "takes a request and performs the action associated with the matching route"

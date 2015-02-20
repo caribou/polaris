@@ -44,13 +44,18 @@
   (fn [request]
     (update-in (handler request) [:status] inc)))
 
+(defn fascism
+  [handler]
+  (fn [request]
+    (assoc (handler request) :status 11)))
+
 (def test-routes
   [["/" :home home
     [["/child" :child child
       [["/grandchild/:face" :grandchild grandchild]]]
      ["/sibling/:hand" :sibling sibling]]]
-   ["/parallel" :parallel {:GET parallel :POST lellarap :append wrapper}
-    [["/orthogonal/:vector" :orthogonal {:PUT orthogonal}]
+   ["/parallel" :parallel {:GET parallel :POST lellarap :float wrapper}
+    [["/orthogonal/:vector" :orthogonal {:PUT orthogonal :sink fascism :float (comp wrapper wrapper)}]
      ["/perpendicular/:tensor/:manifold" :perpendicular perpendicular]]]
    ["/:further" :further further]])
 
@@ -74,11 +79,13 @@
     (is (= "ALTERNATE DIMENsion ---------" (:body (handler {:uri "/parallel/"}))))
     (is (= 201 (:status (handler {:uri "/parallel/"}))))
     (is (= "--------- noisNEMID ETANRETLA" (:body (handler {:uri "/parallel/" :request-method :post}))))
-    (is (= "ORTHOGONAL TO OVOID" (:body (handler {:uri "/parallel/orthogonal/OVOID" :request-method :put}))    ))
+    (is (= "ORTHOGONAL TO OVOID" (:body (handler {:uri "/parallel/orthogonal/OVOID" :request-method :put}))))
+    (is (= 14 (:status (handler {:uri "/parallel/orthogonal/OVOID" :request-method :put}))))
     (is (= 404 (:status (handler {:uri "/parallel/orthogonal/OVOID" :request-method :delete}))))
     (is (= 404 (:status (handler {:uri "/parallel/orthogonal/OVOID"}))))
     (is (= "A IS PERPENDICULAR TO XORB" (:body (handler {:uri "/parallel/perpendicular/A/XORB"}))))
     (is (= 201 (:status (handler {:uri "/parallel/perpendicular/A/XORB"}))))
     (is (= "What are you doing out here wasteland?" (:body (handler {:uri "/wasteland"}))))
     (is (= 404 (:status (handler {:uri "/wasteland/further/nothing/here/monolith"}))))
-    (is (= "/parallel/perpendicular/line/impossible" (reverse-route routes :perpendicular {:tensor "line" :manifold "impossible"})))))
+    (is (= "/parallel/perpendicular/line/impossible" (reverse-route routes :perpendicular {:tensor "line" :manifold "impossible"})))
+    (is (= "/parallel/perpendicular/line/impossible?bar=yellow" (reverse-route routes :perpendicular {:tensor "line" :manifold "impossible" :bar "yellow"})))))
