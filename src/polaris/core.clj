@@ -63,7 +63,7 @@
         mapped (assoc-in routes [:mapping key] route)]
     (update-in mapped [:order] #(conj % route))))
 
-(def method-types [:ANY :GET :PUT :POST :DELETE])
+(def method-types [:ALL :GET :PUT :POST :DELETE])
 
 (defn- action-methods
   [action]

@@ -118,10 +118,10 @@ You can define middleware for a path and all subpaths relative to that path (the
   (fn [request]
     (update-in (app request) [:body] #(str % " underneath a small boat"))))
 
-(def route-definitions
+(def sea-routes
   [["/ocean" :base {:ALL sea-floor :sink anemone :float boat}]])
 
-(def routes (polaris.core/build-routes route-definitions))
+(def routes (polaris.core/build-routes sea-routes))
 (def handler (polaris.core/router routes))
 
 (handler {:uri "/ocean"}) ;; ---> {:status 200 :body "A sandy sea floor covered in anemone underneath a small boat"}

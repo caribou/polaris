@@ -89,3 +89,27 @@
     (is (= 404 (:status (handler {:uri "/wasteland/further/nothing/here/monolith"}))))
     (is (= "/parallel/perpendicular/line/impossible" (reverse-route routes :perpendicular {:tensor "line" :manifold "impossible"})))
     (is (= "/parallel/perpendicular/line/impossible?bar=yellow" (reverse-route routes :perpendicular {:tensor "line" :manifold "impossible" :bar "yellow"})))))
+
+(defn sea-floor
+  [request]
+  {:status 200
+   :body "A sandy sea floor"})
+
+(defn anemone
+  [app]
+  (fn [request]
+    (update-in (app request) [:body] #(str % " covered in anemone"))))
+
+(defn boat
+  [app]
+  (fn [request]
+    (update-in (app request) [:body] #(str % " underneath a small boat"))))
+
+(def sea-routes
+  [["/ocean" :base {:ALL sea-floor :sink anemone :float boat}]])
+
+(deftest sea-routes-test
+  (let [routes (polaris.core/build-routes sea-routes)
+        handler (polaris.core/router routes)]
+    (is (= "A sandy sea floor covered in anemone underneath a small boat" (:body (handler {:uri "/ocean"}))))))
+
