@@ -161,9 +161,9 @@
 (defn query-item
   [[k v]] 
   (str 
-   (codec/url-encode (name k))
+   (codec/form-encode (name k))
    "="
-   (codec/url-encode v)))
+   (codec/form-encode v)))
 
 (defn build-query-string
   [params query-keys]

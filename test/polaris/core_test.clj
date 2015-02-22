@@ -1,7 +1,8 @@
 (ns polaris.core-test
   (:require
    [clojure.test :refer :all]
-   [polaris.core :refer :all]))
+   [polaris.core :refer :all])
+  (:import [java.net URLDecoder]))
 
 (defn home
   [request]
@@ -88,7 +89,8 @@
     (is (= "What are you doing out here wasteland?" (:body (handler {:uri "/wasteland"}))))
     (is (= 404 (:status (handler {:uri "/wasteland/further/nothing/here/monolith"}))))
     (is (= "/parallel/perpendicular/line/impossible" (reverse-route routes :perpendicular {:tensor "line" :manifold "impossible"})))
-    (is (= "/parallel/perpendicular/line/impossible?bar=yellow" (reverse-route routes :perpendicular {:tensor "line" :manifold "impossible" :bar "yellow"})))))
+    (is (= "/parallel/perpendicular/line/impossible?bar=yellow" (reverse-route routes :perpendicular {:tensor "line" :manifold "impossible" :bar "yellow"})))
+    (is (= "/child?qp=with+plus" (URLDecoder/decode(reverse-route routes :child {:qp "with+plus"}))))))
 
 (defn ocean-rock
   [request]
