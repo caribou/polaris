@@ -12,7 +12,7 @@ Also, provides reverse routing for building urls from parameters!
 
 #### Leiningen
 
-    [polaris "0.0.14"]
+    [polaris "0.0.15"]
 
 ## Usage
 
