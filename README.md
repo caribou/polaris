@@ -145,7 +145,7 @@ path elements.
   [["/path/:with/:lots/:of/:variables" :demo (fn [request] "WHAT")]])
 
 (def routes (polaris.core/build-routes route-definitions))
-(polarise.core/reverse-route routes :demo {:with "now" :lots "formed" :of "from" :variables "map"})
+(polaris.core/reverse-route routes :demo {:with "now" :lots "formed" :of "from" :variables "map"})
 ;; --> "/path/now/formed/from/map"   !!
 ```
 
