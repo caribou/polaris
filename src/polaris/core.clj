@@ -32,7 +32,7 @@
   [x]
   (throw
    (IllegalArgumentException.
-    (str "Invalid action type " (-> x class str) " for " x))))
+    (str "Invalid action type " (-> x type pr-str) " for polaris action: " (pr-str x)))))
 
 (defn empty-method?
   [method]
@@ -88,6 +88,8 @@
         actions (action-methods action)
         routes (map
                 (fn [[method action]]
+                  (when-not (try (resolve-action action) (catch Exception _))
+                    (println "warning, bad action" (pr-str action) "for" full-path method))
                   [key method full-path (wrapper action)])
                 actions)]
     (concat routes children)))
